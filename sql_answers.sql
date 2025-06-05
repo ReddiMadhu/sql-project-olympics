@@ -178,8 +178,50 @@ ORDER BY
 LIMIT 5;
 
 
-14.List down total gold, silver and broze medals won by each country.
-15.List down total gold, silver and broze medals won by each country corresponding to each olympic games.
+#14.List down total gold, silver and broze medals won by each country.
+
+SELECT 
+    noc_regions.region AS Country,
+    SUM(CASE WHEN oly_data.Medal = 'Gold' THEN 1 ELSE 0 END) AS Gold_Medals,
+    SUM(CASE WHEN oly_data.Medal = 'Silver' THEN 1 ELSE 0 END) AS Silver_Medals,
+    SUM(CASE WHEN oly_data.Medal = 'Bronze' THEN 1 ELSE 0 END) AS Bronze_Medals,
+    COUNT(oly_data.Medal) AS Total_MEDALS
+FROM
+    oly_data
+LEFT JOIN
+    noc_regions
+ON
+    oly_data.NOC = noc_regions.NOC
+WHERE
+    oly_data.Medal IN ('Gold','Silver','Bronze')
+GROUP BY
+    noc_regions.region
+ORDER BY
+    Total_MEDALS DESC
+
+#15.List down total gold, silver and broze medals won by each country corresponding to each olympic games.
+
+
+SELECT 
+    noc_regions.region AS Country,
+    oly_data.Games,
+    SUM(CASE WHEN oly_data.Medal = 'Gold' THEN 1 ELSE 0 END) AS Gold_Medals,
+    SUM(CASE WHEN oly_data.Medal = 'Silver' THEN 1 ELSE 0 END) AS Silver_Medals,
+    SUM(CASE WHEN oly_data.Medal = 'Bronze' THEN 1 ELSE 0 END) AS Bronze_Medals,
+    COUNT(oly_data.Medal) AS Total_MEDALS
+FROM
+    oly_data
+LEFT JOIN
+    noc_regions
+ON
+    oly_data.NOC = noc_regions.NOC
+WHERE
+    oly_data.Medal IN ('Gold','Silver','Bronze')
+GROUP BY
+    noc_regions.region,oly_data.Games
+ORDER BY
+    Games,Total_MEDALS DESC
+
 16.Identify which country won the most gold, most silver and most bronze medals in each olympic games.
 17.Identify which country won the most gold, most silver, most bronze medals and the most medals in each olympic games.
 18.Which countries have never won gold medal but have won silver/bronze medals?
