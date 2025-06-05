@@ -14,9 +14,9 @@ SELECT COUNT(DISTINCT Games) AS OlympicGames From oly_data;
 SELECT DISTINCT Games AS Olympic_Games From oly_data;
 
 
-3.Mention the total no of nations who participated in each olympics game?
+#3.Mention the total no of nations who participated in each olympics game?
 
-SELECT DISTINCT Games AS Olympic_Games , COUNT(DISTINCT Team) as Total_Nations FROM oly_data GROUP BY Games ;
+SELECT DISTINCT Games AS Olympic_Games , COUNT(DISTINCT Noc) as Total_Nations FROM oly_data GROUP BY Games ;
 
 
 4.Which year saw the highest and lowest no of countries participating in olympics?
