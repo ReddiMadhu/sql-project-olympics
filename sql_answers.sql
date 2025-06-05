@@ -222,10 +222,117 @@ GROUP BY
 ORDER BY
     Games,Total_MEDALS DESC
 
-16.Identify which country won the most gold, most silver and most bronze medals in each olympic games.
-17.Identify which country won the most gold, most silver, most bronze medals and the most medals in each olympic games.
-18.Which countries have never won gold medal but have won silver/bronze medals?
-19.In which Sport/event, India has won highest medals.
+#16.Identify which country won the most gold, most silver and most bronze medals in each olympic games.
+
+WITH Medals_Table AS (
+    SELECT
+        noc_regions.region AS Country,
+        oly_data.Games,
+        SUM(CASE WHEN oly_data.Medal = 'Gold' THEN 1 ELSE 0 END) AS Gold_Medals,
+        SUM(CASE WHEN oly_data.Medal = 'Silver' THEN 1 ELSE 0 END) AS Silver_Medals,
+        SUM(CASE WHEN oly_data.Medal = 'Bronze' THEN 1 ELSE 0 END) AS Bronze_Medals,
+        COUNT(oly_data.Medal) AS Total_MEDALS
+    FROM
+        oly_data
+    LEFT JOIN
+        noc_regions ON oly_data.NOC = noc_regions.NOC
+    WHERE
+        oly_data.Medal IN ('Gold', 'Silver', 'Bronze')
+    GROUP BY
+        noc_regions.region, oly_data.Games
+)
+SELECT 
+    Country,
+    Games,
+    Gold_Medals,
+    Silver_Medals,
+    Bronze_Medals
+FROM 
+    Medals_Table AS Mt
+WHERE 
+    Gold_Medals = (
+        SELECT MAX(ST.Gold_Medals)
+        FROM Medals_Table AS ST
+        WHERE ST.Games = Mt.Games
+    )
+    OR Silver_Medals = (
+        SELECT MAX(ST.Silver_Medals)
+        FROM Medals_Table AS ST
+        WHERE ST.Games = Mt.Games
+    )
+    OR Bronze_Medals = (
+        SELECT MAX(ST.Bronze_Medals)
+        FROM Medals_Table AS ST
+        WHERE ST.Games = Mt.Games
+    )
+ORDER BY 
+    Games;
+
+
+#17.Identify which country won the most gold, most silver, most bronze medals and the most medals in each olympic games.
+
+WITH Medals_Table AS (
+    SELECT
+        noc_regions.region AS Country,
+        oly_data.Games,
+        SUM(CASE WHEN oly_data.Medal = 'Gold' THEN 1 ELSE 0 END) AS Gold_Medals,
+        SUM(CASE WHEN oly_data.Medal = 'Silver' THEN 1 ELSE 0 END) AS Silver_Medals,
+        SUM(CASE WHEN oly_data.Medal = 'Bronze' THEN 1 ELSE 0 END) AS Bronze_Medals,
+        COUNT(oly_data.Medal) AS Total_MEDALS
+    FROM
+        oly_data
+    LEFT JOIN
+        noc_regions ON oly_data.NOC = noc_regions.NOC
+    WHERE
+        oly_data.Medal IN ('Gold', 'Silver', 'Bronze')
+    GROUP BY
+        noc_regions.region, oly_data.Games
+)
+SELECT 
+    Country,
+    Games,
+    Gold_Medals,
+    Silver_Medals,
+    Bronze_Medals,
+    Total_MEDALS
+FROM 
+    Medals_Table AS Mt
+WHERE 
+    Gold_Medals = (
+        SELECT MAX(ST.Gold_Medals)
+        FROM Medals_Table AS ST
+        WHERE ST.Games = Mt.Games
+    )
+    OR Silver_Medals = (
+        SELECT MAX(ST.Silver_Medals)
+        FROM Medals_Table AS ST
+        WHERE ST.Games = Mt.Games
+    )
+    OR Bronze_Medals = (
+        SELECT MAX(ST.Bronze_Medals)
+        FROM Medals_Table AS ST
+        WHERE ST.Games = Mt.Games
+    )
+    OR Total_MEDALS = (
+        SELECT MAX(ST.Total_MEDALS)
+        FROM Medals_Table AS ST
+        WHERE ST.Games = Mt.Games
+    )
+ORDER BY 
+    Games,Total_MEDALS DESC,Gold_Medals DESC,Silver_Medals DESC,Bronze_Medals DESC;
+
+
+#18.Which countries have never won gold medal but have won silver/bronze medals?
+
+SELECT DISTINCT nr.region AS Country
+FROM oly_data oly
+JOIN noc_regions nr ON oly.NOC = nr.NOC
+WHERE oly.Medal IN ('Silver', 'Bronze')
+  AND NOT EXISTS (SELECT 1 FROM oly_data g WHERE g.NOC = oly.NOC AND g.Medal = 'Gold')
+ORDER BY Country;
+
+
+#19.In which Sport/event, India has won highest medals.
 20.Break down all olympic games where india won medal for Hockey and how many medals in each olympic games.
 
 
