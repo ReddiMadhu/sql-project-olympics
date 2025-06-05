@@ -342,7 +342,19 @@ ORDER BY Highest_Medals DESC
 LIMIT 1;
 
 #20.Break down all olympic games where india won medal for Hockey and how many medals in each olympic games.
-
+SELECT 
+    Games,
+    COUNT(DISTINCT CONCAT(Games ,Event)) AS Medals_Won
+FROM 
+    oly_data
+WHERE 
+    NOC = 'IND'
+    AND Sport = 'Hockey'
+    AND Medal IS NOT NULL
+GROUP BY 
+    Games
+ORDER BY 
+    Games;
 
 
 
