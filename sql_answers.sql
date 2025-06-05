@@ -98,10 +98,48 @@ GROUP BY
 
 
 #9.Fetch details of the oldest athletes to win a gold medal.
+SELECT 
+    *
+FROM 
+    oly_data
+WHERE 
+    Sport = 'Athletics'
+    AND Medal = 'Gold'
+    AND Age = (
+        SELECT MAX(Age)
+        FROM oly_data
+        WHERE Sport = 'Athletics' AND Medal = 'Gold'
+);
 
+#10.Find the Ratio of male and female athletes participated in all olympic games.
 
-10.Find the Ratio of male and female athletes participated in all olympic games.
-11.Fetch the top 5 athletes who have won the most gold medals.
+SELECT 
+    SUM(CASE WHEN Sex = 'M' THEN 1 ELSE 0 END) AS Males,
+    SUM(CASE WHEN Sex = 'F' THEN 1 ELSE 0 END) AS Females,
+    ROUND(
+        SUM(CASE WHEN Sex = 'M' THEN 1 ELSE 0 END) / 
+        SUM(CASE WHEN Sex = 'F' THEN 1 ELSE 0 END), 
+    2) AS Male_to_Female_Ratio
+FROM (
+    SELECT DISTINCT Name, Sex
+    FROM oly_data
+) AS unique_athletes;
+
+	
+#11.Fetch the top 5 athletes who have won the most gold medals.
+
+SELECT 
+	Name,
+    COUNT(Medal) AS GOLD_MEDALS
+FROM
+	oly_data
+WHERE
+	Medal ='Gold'
+GROUP BY
+	Name
+ORDER BY
+	GOLD_MEDALS DESC
+LIMIT 5;
 12.Fetch the top 5 athletes who have won the most medals (gold/silver/bronze).
 13.Fetch the top 5 most successful countries in olympics. Success is defined by no of medals won.
 14.List down total gold, silver and broze medals won by each country.
