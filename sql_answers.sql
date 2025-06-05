@@ -45,7 +45,21 @@ WHERE
 	Total_Nations = (SELECT MIN(Total_Nations) from NationsCount);
 
 
-5.Which nation has participated in all of the olympic games?
+#5.Which nation has participated in all of the olympic games?
+
+SELECT 
+    nr.region AS Country
+FROM 
+    oly_data od
+JOIN 
+    noc_regions nr ON od.NOC = nr.NOC
+GROUP BY 
+    od.NOC, nr.region
+HAVING 
+    COUNT(DISTINCT od.Games) = (
+        SELECT COUNT(DISTINCT Games) 
+        FROM oly_data
+    );
 
 
 6.Identify the sport which was played in all summer olympics.
