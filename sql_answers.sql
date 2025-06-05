@@ -62,10 +62,44 @@ HAVING
     );
 
 
-6.Identify the sport which was played in all summer olympics.
+#6.Identify the sport which was played in all summer olympics.
+SELECT 
+	sport
+FROM 
+	oly_data
+WHERE
+	season='summer'
+GROUP BY
+	sport,years,season
+HAVING 
+	COUNT(sport) =(SELECT COUNT(DISTINCT years) FROM oly_data WHERE season ='summer');
+
+
 7.Which Sports were just played only once in the olympics?
-8.Fetch the total no of sports played in each olympic games.
-9.Fetch details of the oldest athletes to win a gold medal.
+
+SELECT 
+	sport
+FROM
+	oly_data
+GROUP BY
+	sport,Games
+HAVING
+	COUNT(Sport)=1;
+
+#8.Fetch the total no of sports played in each olympic games.
+	
+SELECT 
+	Games,
+	COUNT(DISTINCT Sport) AS No_Of_Sports
+FROM
+	oly_data
+GROUP BY
+	Games;
+
+
+#9.Fetch details of the oldest athletes to win a gold medal.
+
+
 10.Find the Ratio of male and female athletes participated in all olympic games.
 11.Fetch the top 5 athletes who have won the most gold medals.
 12.Fetch the top 5 athletes who have won the most medals (gold/silver/bronze).
