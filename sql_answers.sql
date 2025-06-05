@@ -19,8 +19,35 @@ SELECT DISTINCT Games AS Olympic_Games From oly_data;
 SELECT DISTINCT Games AS Olympic_Games , COUNT(DISTINCT Noc) as Total_Nations FROM oly_data GROUP BY Games ;
 
 
-4.Which year saw the highest and lowest no of countries participating in olympics?
+#4.Which year saw the highest and lowest no of countries participating in olympics?
+
+ WITH  NationsCount AS(
+	SELECT 
+		DISTINCT Games AS Olympic_Games , 
+        COUNT(DISTINCT Noc) as Total_Nations 
+	FROM 
+		oly_data 
+	GROUP BY 
+    Games
+)
+SELECT 
+	Olympic_Games, 
+    Total_Nations, 
+	CASE 
+		WHEN Total_Nations = (SELECT MAX(Total_Nations) from NationsCount) THEN 'Highest'
+		WHEN Total_Nations = (SELECT MIN(Total_Nations) from NationsCount) THEN 'Lowest'
+	END AS Participation_Level
+FROM 
+	NationsCount
+WHERE
+	Total_Nations = (SELECT MAX(Total_Nations) from NationsCount)
+    or
+	Total_Nations = (SELECT MIN(Total_Nations) from NationsCount);
+
+
 5.Which nation has participated in all of the olympic games?
+
+
 6.Identify the sport which was played in all summer olympics.
 7.Which Sports were just played only once in the olympics?
 8.Fetch the total no of sports played in each olympic games.
