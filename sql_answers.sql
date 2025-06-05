@@ -140,8 +140,44 @@ GROUP BY
 ORDER BY
 	GOLD_MEDALS DESC
 LIMIT 5;
-12.Fetch the top 5 athletes who have won the most medals (gold/silver/bronze).
-13.Fetch the top 5 most successful countries in olympics. Success is defined by no of medals won.
+
+
+#12.Fetch the top 5 athletes who have won the most medals (gold/silver/bronze).
+
+SELECT 
+	Name,
+    COUNT(Medal) AS MEDALS_COUNT
+FROM
+	oly_data
+WHERE
+	Medal IS NOT NULL
+GROUP BY
+	Name
+ORDER BY
+	MEDALS_COUNT DESC
+LIMIT 5;
+
+
+#13.Fetch the top 5 most successful countries in olympics. Success is defined by no of medals won.
+
+SELECT 
+    noc_regions.region AS Country,
+    COUNT(oly_data.Medal) AS Total_MEDALS
+FROM
+    oly_data
+LEFT JOIN
+    noc_regions
+ON
+    oly_data.NOC = noc_regions.NOC
+WHERE
+    oly_data.Medal IS NOT NULL
+GROUP BY
+    noc_regions.region
+ORDER BY
+    Total_MEDALS DESC
+LIMIT 5;
+
+
 14.List down total gold, silver and broze medals won by each country.
 15.List down total gold, silver and broze medals won by each country corresponding to each olympic games.
 16.Identify which country won the most gold, most silver and most bronze medals in each olympic games.
