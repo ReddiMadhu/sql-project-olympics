@@ -191,5 +191,57 @@ return {
     "prediction": preds_clean.to_dict(orient="records"),
     "shap_values": shap_clean.to_dict(orient="records"),
 }
+import numpy as np
+import pandas as pd
+from fastapi import HTTPException
+
+@app.post("/predict")
+def predict():
+    try:
+        # Your existing code for reading data and making predictions
+        df_input = pd.DataFrame([request.data])
+        df_input = pd.read_csv(csv_path)
+        preds, shap_values = run_prediction(df_input)
+        
+        # Define display columns
+        display_cols = [
+            'submission_id', 'submission_channel', 'Property_state', 'occupancy_type', 'cover_type', 
+            'property_vulnerability_risk', 'construction_risk', 'locality_risk',
+            'coverage_risk', 'claim_history_risk', 'property_condition_risk', 'broker_performance',
+            'total_risk_score', 'Quote_propensity_probability', 'Quote_propensity'
+        ]
+        show_cols = [c for c in display_cols if c in preds.columns]
+        
+        display_data = preds[show_cols].reset_index()
+        
+        # Import numpy for checking
+        import numpy as np
+        
+        # SOLUTION: Clean function to handle all NaN/inf values
+        def clean_for_json(val):
+            """Replace NaN, inf, -inf with None"""
+            if isinstance(val, (float, np.floating)):
+                if np.isnan(val) or np.isinf(val):
+                    return None
+            return val
+        
+        # Apply cleaning to every cell
+        if hasattr(preds, 'map'):  # pandas >= 2.1
+            preds_clean = preds.map(clean_for_json)
+            shap_clean = shap_values.map(clean_for_json)
+        else:  # older pandas
+            preds_clean = preds.applymap(clean_for_json)
+            shap_clean = shap_values.applymap(clean_for_json)
+        
+        print(preds_clean)
+        print(shap_clean)
+        
+        return {
+            "prediction": preds_clean.to_dict(orient="records"),
+            "shap_values": shap_clean.to_dict(orient="records"),
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, details=str(e))
 
 
