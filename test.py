@@ -244,4 +244,41 @@ def predict():
     except Exception as e:
         raise HTTPException(status_code=500, details=str(e))
 
+import json
+import numpy as np
+import pandas as pd
+
+@app.post("/predict")
+def predict():
+    try:
+        df_input = pd.DataFrame([request.data])
+        df_input = pd.read_csv(csv_path)
+        preds, shap_values = run_prediction(df_input)
+
+        # Define display columns
+        display_cols = [
+            'submission_id', 'submission_channel', 'Property_state', 'occupancy_type', 'cover_type',
+            'property_vulnerability_risk', 'construction_risk', 'locality_risk',
+            'coverage_risk', 'claim_history_risk', 'property_condition_risk', 'broker_performance',
+            'total_risk_score', 'Quote_propensity_probability', 'Quote_propensity'
+        ]
+        show_cols = [c for c in display_cols if c in preds.columns]
+        display_data = preds[show_cols].reset_index()
+
+        # ✅ THE DEFINITIVE FIX:
+        # pandas .to_json() converts NaN → null automatically
+        # then json.loads() converts it back to a Python dict
+        preds_clean = json.loads(preds.to_json(orient="records"))
+        shap_clean = json.loads(shap_values.to_json(orient="records"))
+
+        print(preds_clean)
+        print(shap_clean)
+
+        return {
+            "prediction": preds_clean,
+            "shap_values": shap_clean,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))  # 'detail' not 'details'
 
