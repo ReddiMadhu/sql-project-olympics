@@ -171,5 +171,25 @@ def predict():
         
     except Exception as e:
         raise HTTPException(status_code=500, details=str(e))
+# MOST RELIABLE FIX - Replace your lines 103-109 with this
+
+import numpy as np
+import pandas as pd
+
+# Step 1: Replace infinities with NaN
+preds_clean = preds.replace([np.inf, -np.inf], np.nan)
+shap_clean = shap_values.replace([np.inf, -np.inf], np.nan)
+
+# Step 2: Use where() with notna() to replace NaN with None
+preds_clean = preds_clean.where(pd.notna(preds_clean), None)
+shap_clean = shap_clean.where(pd.notna(shap_clean), None)
+
+print(preds_clean)
+print(shap_clean)
+
+return {
+    "prediction": preds_clean.to_dict(orient="records"),
+    "shap_values": shap_clean.to_dict(orient="records"),
+}
 
 
