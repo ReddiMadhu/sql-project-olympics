@@ -128,3 +128,17 @@ NORM_WT = {
     "property_condition_risk": 0.15,
     "broker_performance": 0.10
 }
+    # ... inside your predict function ...
+
+    # 1. FIX NaNs: Replace "NaN" with Python "None" 
+    #    (Pandas "NaN" crashes JSON, but Python "None" becomes valid JSON "null")
+    preds_clean = preds.where(pd.notnull(preds), None)
+    shap_clean = shap_values.where(pd.notnull(shap_values), None)
+
+    # 2. RETURN: Convert both DataFrames to list of dictionaries
+    #    We use .to_dict(orient="records") because shap_values is a DataFrame.
+    return {
+        "prediction": preds_clean.to_dict(orient="records"),
+        "shap_values": shap_clean.to_dict(orient="records")
+    }
+
