@@ -142,3 +142,34 @@ NORM_WT = {
         "shap_values": shap_clean.to_dict(orient="records")
     }
 
+
+# FIXED VERSION - Replace your predict endpoint with this
+
+@app.post("/predict")
+def predict():
+    try:
+        # ... your existing code for df_input, preds, shap_values ...
+        
+        # FIXED: Better NaN handling
+        import numpy as np
+        
+        # Convert predictions to dict and replace NaN with None
+        preds_clean = preds.replace([np.inf, -np.inf], np.nan)  # Replace inf first
+        preds_clean = preds_clean.fillna(None)  # Then replace NaN with None
+        
+        # Same for SHAP values
+        shap_clean = shap_values.replace([np.inf, -np.inf], np.nan)
+        shap_clean = shap_clean.fillna(None)
+        
+        print(preds_clean)
+        print(shap_clean)
+        
+        return {
+            "prediction": preds_clean.to_dict(orient="records"),
+            "shap_values": shap_clean.to_dict(orient="records"),
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, details=str(e))
+
+
