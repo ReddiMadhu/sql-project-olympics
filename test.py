@@ -282,3 +282,50 @@ def predict():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))  # 'detail' not 'details'
 
+
+
+import os
+import pandas as pd
+from fastapi import APIRouter
+
+router = APIRouter()
+
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+csv_path = os.path.join(base_dir, "PROPERTY_PROPENSITY", "Test", "Property_data - AI.csv")
+
+REQUIRED_COLUMNS = [
+    "Id",
+    "propertyId",
+    "submission_channel",
+    "occupancy_type",
+    "property_age",
+    "property_value",
+    "property_county",
+    "cover_type",
+    "building_coverage_limit",
+    "contents_coverage_limit",
+    "broker_company",
+    "construction_risk",
+    "state"
+]
+
+@router.get("/")
+def get_properties():
+    try:
+        if os.path.exists(csv_path):
+            df = pd.read_csv(csv_path)
+
+            # Check if required columns exist
+            available_columns = [col for col in REQUIRED_COLUMNS if col in df.columns]
+
+            if available_columns:
+                df_filtered = df[available_columns]
+                return df_filtered.to_dict(orient="records")
+
+        # If file doesn't exist OR columns missing
+        return MOCK_PROPERTIES
+
+    except Exception as e:
+        print("Error:", e)
+        return MOCK_PROPERTIES
+
