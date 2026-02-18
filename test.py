@@ -329,3 +329,61 @@ def get_properties():
         print("Error:", e)
         return MOCK_PROPERTIES
 
+
+
+
+import os
+import pandas as pd
+from fastapi import APIRouter
+
+router = APIRouter()
+
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+csv_path = os.path.join(base_dir, "PROPERTY_PROPENSITY", "Test", "Property_data - AI.csv")
+
+@router.get("/")
+def get_properties():
+    try:
+        if not os.path.exists(csv_path):
+            return MOCK_PROPERTIES
+
+        df = pd.read_csv(csv_path)
+
+        # Convert dataframe to list of dicts
+        excel_records = df.to_dict(orient="records")
+
+        merged_records = []
+
+        for i, record in enumerate(excel_records):
+
+            # Take mock fallback record (cycle if needed)
+            mock = MOCK_PROPERTIES[i % len(MOCK_PROPERTIES)]
+
+            merged_record = {
+                "Id": i + 1,
+                "propertyId": record.get("submission_id", mock.get("propertyId")),
+                "submission_channel": record.get("submission_channel", mock.get("submission_channel")),
+                "occupancy_type": record.get("occupancy_type", mock.get("occupancy_type")),
+                "property_age": record.get("property_age", mock.get("property_age")),
+                "property_value": record.get("property_value", mock.get("property_value")),
+                "property_county": record.get("Property_county", mock.get("property_county")),
+                "cover_type": record.get("cover_type", mock.get("cover_type")),
+                "building_coverage_limit": record.get("building_coverage_limit", mock.get("building_coverage_limit")),
+                "contents_coverage_limit": record.get("contents_coverage_limit", mock.get("contents_coverage_limit")),
+                "broker_company": record.get("broker_company", mock.get("broker_company")),
+
+                # Missing in Excel → fallback from mock
+                "construction_risk": mock.get("construction_risk"),
+                "state": mock.get("state"),
+                "imageUrl": mock.get("imageUrl"),
+                "roofImageUrl": mock.get("roofImageUrl"),
+            }
+
+            merged_records.append(merged_record)
+
+        return merged_records
+
+    except Exception as e:
+        print("Error:", e)
+        return MOCK_PROPERTIES
+
