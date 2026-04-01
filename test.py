@@ -1,5 +1,5 @@
 # main.py
-
+const cmd = `ffmpeg -i ${inputPath} -c:v libx264 -c:a aac -crf 23 -preset fast -g 48 -keyint_min 48 -movflags +faststart ${outputPath}`;
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any, List
