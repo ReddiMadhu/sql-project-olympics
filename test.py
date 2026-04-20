@@ -194,3 +194,189 @@ def engineer_features(df1, WEIGHTS, VULN_WEIGHT=None):
     df = df[df["Decision"] != "UW Review"]
 
     return df
+"""
+Property API — local test server
+Endpoints:
+  POST /add_property          → { property_id }
+  GET  /get_address           → full address record
+  GET  /get_vulnerability_score → { property_vulnerability_score }
+  GET  /properties            → list all stored properties  (debug)
+  GET  /health                → liveness check
+"""
+
+import uuid
+import hashlib
+import random
+from typing import Optional, Union
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+app = FastAPI(
+    title="Property API",
+    description="Test backend for property vulnerability scoring pipeline",
+    version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ── In-memory store ───────────────────────────────────────────────────────────
+PROPERTY_STORE: dict[str, dict] = {}
+
+
+# ── Schemas ───────────────────────────────────────────────────────────────────
+class AddPropertyRequest(BaseModel):
+    address: str
+    latitude: Optional[Union[str, float]] = None
+    longitude: Optional[Union[str, float]] = None
+    country: Optional[str] = None
+    state: Optional[str] = None
+    city: Optional[str] = None
+    zipcode: Optional[Union[int, str]] = None
+    images: Optional[list[dict]] = []
+    property_type: Optional[str] = "residential"
+
+
+# ── Vulnerability scoring mock ────────────────────────────────────────────────
+PROPERTY_TYPE_BASE: dict[str, float] = {
+    "residential":  35.0,
+    "commercial":   55.0,
+    "industrial":   65.0,
+    "mixed_use":    50.0,
+    "vacant":       70.0,
+}
+
+HIGH_RISK_STATES = {"FL", "TX", "LA", "CA", "OK"}
+MODERATE_RISK_STATES = {"GA", "SC", "NC", "AL", "MS", "AR"}
+
+
+def _compute_vulnerability_score(prop: dict) -> float:
+    """
+    Deterministic-ish mock scorer.
+    Real implementation would call your ML model / FEMA lookup here.
+    Score range: 0 – 100
+    """
+    seed_str = f"{prop.get('address','')}{prop.get('zipcode','')}"
+    seed = int(hashlib.md5(seed_str.encode()).hexdigest(), 16) % 10_000
+
+    rng = random.Random(seed)
+    base = PROPERTY_TYPE_BASE.get(prop.get("property_type", "residential"), 40.0)
+
+    state = (prop.get("state") or "").upper()
+    if state in HIGH_RISK_STATES:
+        base += rng.uniform(15, 25)
+    elif state in MODERATE_RISK_STATES:
+        base += rng.uniform(5, 15)
+    else:
+        base += rng.uniform(-5, 10)
+
+    # Coastal / southern latitude nudge
+    try:
+        lat = float(prop.get("latitude") or 37.0)
+        if lat < 32.0:
+            base += rng.uniform(5, 12)
+    except (TypeError, ValueError):
+        pass
+
+    score = round(min(max(base + rng.uniform(-3, 3), 0), 100), 2)
+    return score
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "properties_stored": len(PROPERTY_STORE)}
+
+
+@app.post("/add_property", status_code=201)
+def add_property(body: AddPropertyRequest):
+    """
+    Register a property and return a unique property_id.
+    Mirrors the signature from the API spec in the chat screenshot.
+    """
+    property_id = str(uuid.uuid4())
+
+    record = body.model_dump()
+    record["property_id"] = property_id
+    record["vulnerability_score"] = _compute_vulnerability_score(record)
+
+    PROPERTY_STORE[property_id] = record
+
+    return {
+        "property_id": property_id,
+        "message": "Property registered successfully",
+    }
+
+
+@app.get("/get_address")
+def get_address(property_id: str = Query(..., description="UUID returned by /add_property")):
+    """Return the full stored address record for a property."""
+    prop = PROPERTY_STORE.get(property_id)
+    if not prop:
+        raise HTTPException(status_code=404, detail=f"property_id '{property_id}' not found")
+
+    return {
+        "property_id": property_id,
+        "address":     prop.get("address"),
+        "latitude":    prop.get("latitude"),
+        "longitude":   prop.get("longitude"),
+        "country":     prop.get("country"),
+        "state":       prop.get("state"),
+        "city":        prop.get("city"),
+        "zipcode":     prop.get("zipcode"),
+        "property_type": prop.get("property_type"),
+    }
+
+
+@app.get("/get_vulnerability_score")
+def get_vulnerability_score(property_id: str = Query(..., description="UUID returned by /add_property")):
+    """
+    Return vulnerability score for a registered property.
+    Score is 0–100; higher = more vulnerable.
+    """
+    prop = PROPERTY_STORE.get(property_id)
+    if not prop:
+        raise HTTPException(status_code=404, detail=f"property_id '{property_id}' not found")
+
+    score = prop.get("vulnerability_score", _compute_vulnerability_score(prop))
+
+    # Risk band for human readability
+    if score < 40:
+        band = "Low risk"
+    elif score < 75:
+        band = "Moderate risk"
+    else:
+        band = "High risk"
+
+    return {
+        "property_id":                 property_id,
+        "property_vulnerability_score": score,
+        "risk_band":                   band,
+        "address":                     prop.get("address"),
+        "state":                       prop.get("state"),
+    }
+
+
+@app.get("/properties")
+def list_properties():
+    """Debug endpoint — list all stored properties with their scores."""
+    return {
+        "count": len(PROPERTY_STORE),
+        "properties": [
+            {
+                "property_id": pid,
+                "address":     p.get("address"),
+                "state":       p.get("state"),
+                "property_type": p.get("property_type"),
+                "vulnerability_score": p.get("vulnerability_score"),
+            }
+            for pid, p in PROPERTY_STORE.items()
+        ],
+    }
