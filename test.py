@@ -1,389 +1,196 @@
-# main.py
-const cmd = `ffmpeg -i ${inputPath} -c:v libx264 -c:a aac -crf 23 -preset fast -g 48 -keyint_min 48 -movflags +faststart ${outputPath}`;
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import Dict, Any, List
+import requests
 import pandas as pd
-import uvicorn
+import numpy as np
+import os
+from Script.Property.Compliance import building_compliance
+from Script.Property.Total_risk import calculate_total_risk
 
-from config import NORM_WT
-from services import run_prediction
-
-app = FastAPI(
-    title="Property Propensity AI API",
-    version="1.0"
-)
-
-
-# -------------------------
-# Request Models
-# -------------------------
-
-class PropertyInput(BaseModel):
-    data: Dict[str, Any]
+# ── CONFIG ──────────────────────────────────────────────────────────────────
+GEOAPIFY_API_KEY = os.getenv("GEOAPIFY_API_KEY", "")
+PROPERTY_API_BASE = os.getenv("PROPERTY_API_BASE", "http://localhost:8000")  # adjust to your system URL
 
 
-class BatchInput(BaseModel):
-    records: List[Dict[str, Any]]
+# ── HELPERS ─────────────────────────────────────────────────────────────────
 
-
-# -------------------------
-# Health Check
-# -------------------------
-
-@app.get("/health")
-def health():
-    return {"status": "API is running successfully"}
-
-
-# -------------------------
-# Single Prediction
-# -------------------------
-
-@app.post("/predict")
-def predict(request: PropertyInput):
-
-    try:
-        df_input = pd.DataFrame([request.data])
-
-        preds, shap_values = run_prediction(df_input, NORM_WT)
-
-        return {
-            "prediction": preds.tolist(),
-            "shap_values": str(shap_values)
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# -------------------------
-# Batch Prediction
-# -------------------------
-
-@app.post("/batch-predict")
-def batch_predict(request: BatchInput):
-
-    try:
-        df_input = pd.DataFrame(request.records)
-
-        preds, _ = run_prediction(df_input, NORM_WT)
-
-        return {
-            "predictions": preds.tolist()
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# -------------------------
-# Run Server
-# -------------------------
-
-if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
-
-# services.py
-
-import pandas as pd
-from Script.Property.Droping_Null_Values import clean_table
-from Script.Property.Decline_and_UW_Review_rules import apply_evaluation
-from Script.Property.Feature_engineering import engineer_features
-from Script.Property.Preprocessing import preprocess_submission_data
-from Script.Property.new_data_pred import predict_xgboost_model
-from Script.Property.prop_shap import prop_shap
-
-
-def run_prediction(df_input: pd.DataFrame, norm_wt: dict):
-
-    # Step 1: Cleaning
-    df_clean = clean_table(df_input)
-
-    # Step 2: Apply rules
-    df_rules = apply_evaluation(df_clean)
-
-    # Step 3: Feature engineering
-    df_feat = engineer_features(df_rules, norm_wt)
-
-    # Step 4: Preprocessing
-    df_proc = preprocess_submission_data(df_feat)
-
-    # Step 5: SHAP
-    shap_values = prop_shap(df_proc)
-
-    # Step 6: Prediction
-    preds = predict_xgboost_model(df_feat, df_proc)
-
-    return preds, shap_values
-
-# config.py
-
-NORM_WT = {
-    "property_vulnerability_risk": 0.2,
-    "construction_risk": 0.1,
-    "locality_risk": 0.3,
-    "coverage_risk": 0.1,
-    "claim_history_risk": 0.05,
-    "property_condition_risk": 0.15,
-    "broker_performance": 0.10
-}
-    # ... inside your predict function ...
-
-    # 1. FIX NaNs: Replace "NaN" with Python "None" 
-    #    (Pandas "NaN" crashes JSON, but Python "None" becomes valid JSON "null")
-    preds_clean = preds.where(pd.notnull(preds), None)
-    shap_clean = shap_values.where(pd.notnull(shap_values), None)
-
-    # 2. RETURN: Convert both DataFrames to list of dictionaries
-    #    We use .to_dict(orient="records") because shap_values is a DataFrame.
+def _geocode_address(address: str) -> dict:
+    """Call Geoapify geocoding API, return structured location payload."""
+    url = "https://api.geoapify.com/v1/geocode/search"
+    params = {"text": address, "apiKey": GEOAPIFY_API_KEY, "limit": 1}
+    resp = requests.get(url, params=params, timeout=10)
+    resp.raise_for_status()
+    features = resp.json().get("features", [])
+    if not features:
+        raise ValueError(f"Geoapify returned no results for address: {address}")
+    props = features[0]["properties"]
+    geo   = features[0]["geometry"]["coordinates"]  # [lon, lat]
     return {
-        "prediction": preds_clean.to_dict(orient="records"),
-        "shap_values": shap_clean.to_dict(orient="records")
+        "address":       address,
+        "latitude":      geo[1],
+        "longitude":     geo[0],
+        "country":       props.get("country"),
+        "state":         props.get("state"),
+        "city":          props.get("city"),
+        "zipcode":       props.get("postcode"),
+        "images":        [],          # empty unless caller provides them
+        "property_type": "residential",  # default; override if df has this col
     }
 
 
-# FIXED VERSION - Replace your predict endpoint with this
-
-@app.post("/predict")
-def predict():
-    try:
-        # ... your existing code for df_input, preds, shap_values ...
-        
-        # FIXED: Better NaN handling
-        import numpy as np
-        
-        # Convert predictions to dict and replace NaN with None
-        preds_clean = preds.replace([np.inf, -np.inf], np.nan)  # Replace inf first
-        preds_clean = preds_clean.fillna(None)  # Then replace NaN with None
-        
-        # Same for SHAP values
-        shap_clean = shap_values.replace([np.inf, -np.inf], np.nan)
-        shap_clean = shap_clean.fillna(None)
-        
-        print(preds_clean)
-        print(shap_clean)
-        
-        return {
-            "prediction": preds_clean.to_dict(orient="records"),
-            "shap_values": shap_clean.to_dict(orient="records"),
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, details=str(e))
-# MOST RELIABLE FIX - Replace your lines 103-109 with this
-
-import numpy as np
-import pandas as pd
-
-# Step 1: Replace infinities with NaN
-preds_clean = preds.replace([np.inf, -np.inf], np.nan)
-shap_clean = shap_values.replace([np.inf, -np.inf], np.nan)
-
-# Step 2: Use where() with notna() to replace NaN with None
-preds_clean = preds_clean.where(pd.notna(preds_clean), None)
-shap_clean = shap_clean.where(pd.notna(shap_clean), None)
-
-print(preds_clean)
-print(shap_clean)
-
-return {
-    "prediction": preds_clean.to_dict(orient="records"),
-    "shap_values": shap_clean.to_dict(orient="records"),
-}
-import numpy as np
-import pandas as pd
-from fastapi import HTTPException
-
-@app.post("/predict")
-def predict():
-    try:
-        # Your existing code for reading data and making predictions
-        df_input = pd.DataFrame([request.data])
-        df_input = pd.read_csv(csv_path)
-        preds, shap_values = run_prediction(df_input)
-        
-        # Define display columns
-        display_cols = [
-            'submission_id', 'submission_channel', 'Property_state', 'occupancy_type', 'cover_type', 
-            'property_vulnerability_risk', 'construction_risk', 'locality_risk',
-            'coverage_risk', 'claim_history_risk', 'property_condition_risk', 'broker_performance',
-            'total_risk_score', 'Quote_propensity_probability', 'Quote_propensity'
-        ]
-        show_cols = [c for c in display_cols if c in preds.columns]
-        
-        display_data = preds[show_cols].reset_index()
-        
-        # Import numpy for checking
-        import numpy as np
-        
-        # SOLUTION: Clean function to handle all NaN/inf values
-        def clean_for_json(val):
-            """Replace NaN, inf, -inf with None"""
-            if isinstance(val, (float, np.floating)):
-                if np.isnan(val) or np.isinf(val):
-                    return None
-            return val
-        
-        # Apply cleaning to every cell
-        if hasattr(preds, 'map'):  # pandas >= 2.1
-            preds_clean = preds.map(clean_for_json)
-            shap_clean = shap_values.map(clean_for_json)
-        else:  # older pandas
-            preds_clean = preds.applymap(clean_for_json)
-            shap_clean = shap_values.applymap(clean_for_json)
-        
-        print(preds_clean)
-        print(shap_clean)
-        
-        return {
-            "prediction": preds_clean.to_dict(orient="records"),
-            "shap_values": shap_clean.to_dict(orient="records"),
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, details=str(e))
-
-import json
-import numpy as np
-import pandas as pd
-
-@app.post("/predict")
-def predict():
-    try:
-        df_input = pd.DataFrame([request.data])
-        df_input = pd.read_csv(csv_path)
-        preds, shap_values = run_prediction(df_input)
-
-        # Define display columns
-        display_cols = [
-            'submission_id', 'submission_channel', 'Property_state', 'occupancy_type', 'cover_type',
-            'property_vulnerability_risk', 'construction_risk', 'locality_risk',
-            'coverage_risk', 'claim_history_risk', 'property_condition_risk', 'broker_performance',
-            'total_risk_score', 'Quote_propensity_probability', 'Quote_propensity'
-        ]
-        show_cols = [c for c in display_cols if c in preds.columns]
-        display_data = preds[show_cols].reset_index()
-
-        # ✅ THE DEFINITIVE FIX:
-        # pandas .to_json() converts NaN → null automatically
-        # then json.loads() converts it back to a Python dict
-        preds_clean = json.loads(preds.to_json(orient="records"))
-        shap_clean = json.loads(shap_values.to_json(orient="records"))
-
-        print(preds_clean)
-        print(shap_clean)
-
-        return {
-            "prediction": preds_clean,
-            "shap_values": shap_clean,
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))  # 'detail' not 'details'
+def _add_property(payload: dict) -> str:
+    """POST to /add_property, return property_id string."""
+    url = f"{PROPERTY_API_BASE}/add_property"
+    resp = requests.post(url, json=payload, timeout=15)
+    resp.raise_for_status()
+    data = resp.json()
+    property_id = data.get("property_id")
+    if not property_id:
+        raise ValueError(f"/add_property response missing property_id: {data}")
+    return str(property_id)
 
 
-
-import os
-import pandas as pd
-from fastapi import APIRouter
-
-router = APIRouter()
-
-base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-csv_path = os.path.join(base_dir, "PROPERTY_PROPENSITY", "Test", "Property_data - AI.csv")
-
-REQUIRED_COLUMNS = [
-    "Id",
-    "propertyId",
-    "submission_channel",
-    "occupancy_type",
-    "property_age",
-    "property_value",
-    "property_county",
-    "cover_type",
-    "building_coverage_limit",
-    "contents_coverage_limit",
-    "broker_company",
-    "construction_risk",
-    "state"
-]
-
-@router.get("/")
-def get_properties():
-    try:
-        if os.path.exists(csv_path):
-            df = pd.read_csv(csv_path)
-
-            # Check if required columns exist
-            available_columns = [col for col in REQUIRED_COLUMNS if col in df.columns]
-
-            if available_columns:
-                df_filtered = df[available_columns]
-                return df_filtered.to_dict(orient="records")
-
-        # If file doesn't exist OR columns missing
-        return MOCK_PROPERTIES
-
-    except Exception as e:
-        print("Error:", e)
-        return MOCK_PROPERTIES
+def _get_vulnerability_score(property_id: str) -> float:
+    """GET vulnerability score for a registered property_id."""
+    url = f"{PROPERTY_API_BASE}/get_vulnerability_score"
+    resp = requests.get(url, params={"property_id": property_id}, timeout=15)
+    resp.raise_for_status()
+    data = resp.json()
+    score = data.get("property_vulnerability_score") or data.get("vulnerability_score")
+    if score is None:
+        raise ValueError(f"get_vulnerability_score response missing score: {data}")
+    return float(score)
 
 
+def _fetch_vuln_score_via_api(address: str, property_type: str = "residential") -> float:
+    """
+    Full pipeline: address → Geoapify → /add_property → get_vulnerability_score.
+    Raises on any failure (caller handles fallback).
+    """
+    payload = _geocode_address(address)
+    payload["property_type"] = property_type  # override with actual type if available
+    property_id = _add_property(payload)
+    return _get_vulnerability_score(property_id)
 
 
-import os
-import pandas as pd
-from fastapi import APIRouter
+def _build_address_string(row: pd.Series) -> str:
+    """Compose a best-effort address string from available row fields."""
+    parts = []
+    for col in ["address", "street_address", "Property_address"]:
+        if col in row.index and pd.notna(row[col]):
+            parts.append(str(row[col]))
+            break
+    for col in ["city", "Property_city", "City"]:
+        if col in row.index and pd.notna(row[col]):
+            parts.append(str(row[col]))
+            break
+    for col in ["state", "Property_state", "State"]:
+        if col in row.index and pd.notna(row[col]):
+            parts.append(str(row[col]))
+            break
+    for col in ["zipcode", "Property_postal_code", "zip"]:
+        if col in row.index and pd.notna(row[col]):
+            parts.append(str(row[col]))
+            break
+    if not parts:
+        raise ValueError("No usable address columns found on row")
+    return ", ".join(parts)
 
-router = APIRouter()
 
-base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-csv_path = os.path.join(base_dir, "PROPERTY_PROPENSITY", "Test", "Property_data - AI.csv")
+# ── MAIN FUNCTION ────────────────────────────────────────────────────────────
 
-@router.get("/")
-def get_properties():
-    try:
-        if not os.path.exists(csv_path):
-            return MOCK_PROPERTIES
+def engineer_features(df1, WEIGHTS, VULN_WEIGHT=None):
 
-        df = pd.read_csv(csv_path)
+    current_dir = os.getcwd()
+    input_path = os.path.join(current_dir, "Input_Table", "Property_insight_risk.csv")
 
-        # Convert dataframe to list of dicts
-        excel_records = df.to_dict(orient="records")
+    # ── Load CSV fallback data (always loaded; used when API is skipped/fails) ──
+    if not os.path.exists(input_path):
+        raise FileNotFoundError(
+            f"CSV not found.\n"
+            f"Project root: {current_dir}\n"
+            f"Expected path: {input_path}"
+        )
+    df2 = pd.read_csv(input_path)
 
-        merged_records = []
+    df = df1.merge(df2, how="left", on=["Property_state", "Property_postal_code"])
 
-        for i, record in enumerate(excel_records):
+    # ── Building compliance & credit scoring (unchanged) ──────────────────────
+    df["building_code_compliance"] = df.apply(building_compliance, axis=1)
 
-            # Take mock fallback record (cycle if needed)
-            mock = MOCK_PROPERTIES[i % len(MOCK_PROPERTIES)]
+    bins   = [299, 649, 749, 850]
+    labels = ["Low", "Medium", "High"]
+    df["credit_category"] = pd.cut(df["credit_score"], bins=bins, labels=labels)
 
-            merged_record = {
-                "Id": i + 1,
-                "propertyId": record.get("submission_id", mock.get("propertyId")),
-                "submission_channel": record.get("submission_channel", mock.get("submission_channel")),
-                "occupancy_type": record.get("occupancy_type", mock.get("occupancy_type")),
-                "property_age": record.get("property_age", mock.get("property_age")),
-                "property_value": record.get("property_value", mock.get("property_value")),
-                "property_county": record.get("Property_county", mock.get("property_county")),
-                "cover_type": record.get("cover_type", mock.get("cover_type")),
-                "building_coverage_limit": record.get("building_coverage_limit", mock.get("building_coverage_limit")),
-                "contents_coverage_limit": record.get("contents_coverage_limit", mock.get("contents_coverage_limit")),
-                "broker_company": record.get("broker_company", mock.get("broker_company")),
+    df["ContentsRatio"] = np.where(
+        df["building_coverage_limit"] != 0,
+        round(df["contents_coverage_limit"] / df["building_coverage_limit"], 2), 0
+    )
+    df["ClaimSeverity"] = np.where(
+        df["Property_past_loss_freq"] != 0,
+        round(df["Property_past_claim_amount"] / df["Property_past_loss_freq"], 2), 0
+    )
+    df["coverage_to_value_ratio"] = round(
+        df["building_coverage_limit"] / df["property_value"], 2
+    )
 
-                # Missing in Excel → fallback from mock
-                "construction_risk": mock.get("construction_risk"),
-                "state": mock.get("state"),
-                "imageUrl": mock.get("imageUrl"),
-                "roofImageUrl": mock.get("roofImageUrl"),
-            }
+    # ── Risk score columns ────────────────────────────────────────────────────
+    risk_columns = [
+        "property_vulnerability_risk", "construction_risk", "locality_risk",
+        "coverage_risk", "claim_history_risk", "property_condition_risk",
+        "broker_performance"
+    ]
 
-            merged_records.append(merged_record)
+    risk_scores = df.apply(calculate_total_risk, axis=1)
+    risk_df     = pd.DataFrame(list(risk_scores))
+    df          = pd.concat([df, risk_df], axis=1)
 
-        return merged_records
+    # ── API-based vulnerability override (only when VULN_WEIGHT is provided) ──
+    if VULN_WEIGHT is not None:
+        print(f"[engineer_features] VULN_WEIGHT={VULN_WEIGHT} — fetching vulnerability scores via API")
 
-    except Exception as e:
-        print("Error:", e)
-        return MOCK_PROPERTIES
+        def resolve_vuln_score(row):
+            """Try API pipeline; fall back to CSV-sourced value on any error."""
+            try:
+                address = _build_address_string(row)
+                ptype   = row.get("property_type", "residential") if "property_type" in row.index else "residential"
+                score   = _fetch_vuln_score_via_api(address, property_type=ptype)
+                return score
+            except Exception as e:
+                print(f"[WARN] API vuln score failed for row {row.name}: {e} — using CSV fallback")
+                # Fall back to whatever was merged in from the CSV
+                return row.get("property_vulnerability_risk", np.nan)
 
+        df["property_vulnerability_risk"] = df.apply(resolve_vuln_score, axis=1)
+
+    # ── Total risk calculation ────────────────────────────────────────────────
+    def calculate_row_risk(row):
+        base_risk = (
+            WEIGHTS.get("construction_risk",       0) * row.get("construction_risk",       0) +
+            WEIGHTS.get("locality_risk",            0) * row.get("locality_risk",            0) +
+            WEIGHTS.get("coverage_risk",            0) * row.get("coverage_risk",            0) +
+            WEIGHTS.get("claim_history_risk",       0) * row.get("claim_history_risk",       0) +
+            WEIGHTS.get("property_condition_risk",  0) * row.get("property_condition_risk",  0) +
+            WEIGHTS.get("broker_performance",       0) * row.get("broker_performance",       0)
+        )
+        if VULN_WEIGHT is not None and pd.notna(row.get("property_vulnerability_risk")):
+            total_risk = (
+                VULN_WEIGHT       * row.get("property_vulnerability_risk", 0) +
+                (1 - VULN_WEIGHT) * base_risk
+            )
+        else:
+            total_risk = base_risk
+        return total_risk
+
+    df["total_risk_score"] = df.apply(calculate_row_risk, axis=1).astype(int)
+
+    # ── Risk category bucketing ───────────────────────────────────────────────
+    df["risk_category"] = pd.cut(
+        df["total_risk_score"],
+        bins=[0, 40, 75, 100],
+        labels=["Low risk", "Moderate risk", "High risk"],
+        include_lowest=True
+    )
+
+    # ── Filter out UW Review applications ────────────────────────────────────
+    df = df[df["Decision"] != "UW Review"]
+
+    return df
