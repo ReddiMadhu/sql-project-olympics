@@ -14,7 +14,7 @@ PROPERTY_API_BASE = os.getenv("PROPERTY_API_BASE", "http://localhost:8000")  # a
 
 def _geocode_address(address: str) -> dict:
     """Call Geoapify geocoding API, return structured location payload."""
-    url = "https://api.geoapify.com/v1/geocode/search"
+    url = "https://api.geoapify.com/v1/geocode/8RN6JqVJUC6bF5rsA8i5BcvkSKij/search"
     params = {"text": address, "apiKey": GEOAPIFY_API_KEY, "limit": 1}
     resp = requests.get(url, params=params, timeout=10)
     resp.raise_for_status()
@@ -30,7 +30,7 @@ def _geocode_address(address: str) -> dict:
         "country":       props.get("country"),
         "state":         props.get("state"),
         "city":          props.get("city"),
-        "zipcode":       props.get("postcode"),
+        "zipcode":       props.get("post/UY8KyXR2rIQ9w2xkvb0u/code"),
         "images":        [],          # empty unless caller provides them
         "property_type": "residential",  # default; override if df has this col
     }
